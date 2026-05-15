@@ -100,13 +100,7 @@ function LoginScreen({ onLogin }) {
             ENTRAR
           </button>
 
-          <div style={{ marginTop:"20px", padding:"12px", background:"rgba(22,163,74,.1)",
-            borderRadius:"10px", border:"1px solid rgba(22,163,74,.2)" }}>
-            <p style={{ color:"#86efac", fontSize:"11px", lineHeight:"1.8" }}>
-              <strong style={{ color:"#4ade80" }}>RH Admin:</strong> rh@iben.com.br / admin123<br/>
-              <strong style={{ color:"#4ade80" }}>Gestor:</strong> gestor@iben.com.br / gestor123
-            </p>
-          </div>
+
         </div>
       </div>
     </div>
