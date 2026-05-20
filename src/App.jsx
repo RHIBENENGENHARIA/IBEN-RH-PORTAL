@@ -14,9 +14,10 @@ const FINAL_OPTIONS = ["DESEMPENHO EXEMPLAR","ACIMA DO ESPERADO","BOM, MAS É PR
 const PIE_COLORS = ["#22c55e","#84cc16","#f59e0b","#ef4444"];
 
 const USERS = {
-  "rh@iben.com.br":        { password:"admin123",      role:"admin",   name:"RH Administrador" },
-  "gestor@iben.com.br":    { password:"gestor123",     role:"gestor",  name:"Gestores iBen" },
-  "diretores@iben.com.br": { password:"diretores1234", role:"diretor", name:"Diretoria iBen" },
+  "rh@iben.com.br":             { password:"admin123",      role:"admin",          name:"RH Administrador" },
+  "gestor@iben.com.br":         { password:"gestor123",     role:"gestor",         name:"Gestores iBen" },
+  "diretores@iben.com.br":      { password:"diretores1234", role:"diretor",        name:"Diretoria iBen" },
+  "gerentedeobras@iben.com.br": { password:"obras123",      role:"gestor",         name:"Gerente de Obras iBen" },
 };
 
 const MOCK_EVALS = [
