@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { db } from "./firebase";
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from "firebase/firestore";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -397,7 +399,7 @@ function EvalDetail({ ev, user, onBack, onEdit, onDelete }) {
 }
 
 // ─── EVAL FORM ────────────────────────────────────────────────────────────────
-function EvalForm({ area, sector, user, evaluations, setEvaluations, onBack, editTarget, setEditTarget }) {
+function EvalForm({ area, sector, user, evaluations, addEvaluation, updateEvaluation, deleteEvaluation, onBack, editTarget, setEditTarget }) {
   const blank = { name:"", role:"", q1:"", q2:"", q3:"", q4:"", q5:"", feedback:"", date:"", final:"" };
   const [form,     setForm]     = useState(editTarget ? { ...editTarget } : blank);
   const [tab,      setTab]      = useState("form");
@@ -413,25 +415,25 @@ function EvalForm({ area, sector, user, evaluations, setEvaluations, onBack, edi
     return e.evaluatorName === user.name;
   });
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name || !form.role || !form.final) {
       alert("Preencha Nome, Função e Avaliação Final antes de salvar.");
       return;
     }
-    const record = { ...form, area, sector, evaluatorName: user.name, evaluatorRole: user.role, id: editTarget ? editTarget.id : Date.now() };
+    const record = { ...form, area, sector, evaluatorName: user.name, evaluatorRole: user.role, createdAt: new Date().toISOString() };
     if (editTarget) {
-      setEvaluations(ev => ev.map(e => e.id === editTarget.id ? record : e));
+      await updateEvaluation({ ...record, id: editTarget.id });
       setEditTarget(null);
     } else {
-      setEvaluations(ev => [...ev, record]);
+      await addEvaluation(record);
     }
     setSaved(true);
     setForm(blank);
     setTimeout(() => setSaved(false), 3000);
   };
 
-  const handleDelete = (id) => {
-    setEvaluations(ev => ev.filter(e => e.id !== id));
+  const handleDelete = async (id) => {
+    await deleteEvaluation(id);
     setDetailEv(null);
   };
 
@@ -776,12 +778,67 @@ export default function App() {
   const [view,        setView]        = useState("home");
   const [sector,      setSector]      = useState(null);
   const [area,        setArea]        = useState(null);
-  const [evaluations, setEvaluations] = useState(MOCK_EVALS);
+  const [evaluations, setEvaluations] = useState([]);
   const [editTarget,  setEditTarget]  = useState(null);
+  const [loading,     setLoading]     = useState(true);
+
+  // ── Load evaluations from Firestore in real-time ──
+  useEffect(() => {
+    const q = query(collection(db, "evaluations"), orderBy("date", "desc"));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setEvaluations(data);
+      setLoading(false);
+    }, () => {
+      // Firestore not configured yet — fall back to mock data
+      setEvaluations(MOCK_EVALS);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  // ── Save new evaluation ──
+  const addEvaluation = async (record) => {
+    try {
+      const { id, ...data } = record;
+      await addDoc(collection(db, "evaluations"), data);
+    } catch {
+      setEvaluations(ev => [...ev, record]);
+    }
+  };
+
+  // ── Update evaluation ──
+  const updateEvaluation = async (record) => {
+    try {
+      const { id, ...data } = record;
+      await updateDoc(doc(db, "evaluations", String(id)), data);
+    } catch {
+      setEvaluations(ev => ev.map(e => e.id === record.id ? record : e));
+    }
+  };
+
+  // ── Delete evaluation ──
+  const deleteEvaluation = async (id) => {
+    try {
+      await deleteDoc(doc(db, "evaluations", String(id)));
+    } catch {
+      setEvaluations(ev => ev.filter(e => e.id !== id));
+    }
+  };
 
   if (!user) return <LoginScreen onLogin={u => { setUser(u); setView("home"); }}/>;
 
   const logout = () => { setUser(null); setView("home"); setSector(null); setArea(null); setEditTarget(null); };
+
+  if (loading) return (
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center",
+      background:"linear-gradient(135deg,#052e16,#14532d)" }}>
+      <div style={{ textAlign:"center", color:"#fff" }}>
+        <div style={{ fontFamily:"Georgia,serif", fontSize:"28px", letterSpacing:"3px", marginBottom:"16px" }}>iBen</div>
+        <div style={{ color:"#86efac", fontSize:"13px", letterSpacing:"2px" }}>Carregando dados...</div>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily:"'Segoe UI',system-ui,sans-serif", minHeight:"100vh" }}>
@@ -798,7 +855,10 @@ export default function App() {
           onArea={a => { setArea(a); setView("form"); }} onBack={() => setView("home")}/>}
       {view === "form" &&
         <EvalForm area={area} sector={sector} user={user}
-          evaluations={evaluations} setEvaluations={setEvaluations}
+          evaluations={evaluations}
+          addEvaluation={addEvaluation}
+          updateEvaluation={updateEvaluation}
+          deleteEvaluation={deleteEvaluation}
           onBack={() => setView("list")}
           editTarget={editTarget} setEditTarget={setEditTarget}/>}
     </div>
