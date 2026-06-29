@@ -21,6 +21,7 @@ const USERS = {
   "gestor@iben.com.br":    { password:"gestor123",     role:"gestor",  name:"Gestores iBen" },
   "diretores@iben.com.br": { password:"diretores1234", role:"diretor", name:"Diretoria iBen" },
   "gerentes@iben.com.br":  { password:"gerencia1234",  role:"gestor",  name:"Gerentes iBen" },
+  "igor@iben.eng.br":      { password:"Iben@123",       role:"gestor",  name:"Igor iBen" },
 };
 
 const MOCK_EVALS = [
