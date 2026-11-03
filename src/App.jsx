@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from "firebase/firestore";
@@ -21,8 +20,8 @@ const USERS = {
   "gestor@iben.com.br":    { password:"gestor123",     role:"gestor",  name:"Gestores iBen" },
   "diretores@iben.com.br": { password:"diretores1234", role:"diretor", name:"Diretoria iBen" },
   "gerentes@iben.com.br":  { password:"gerencia1234",  role:"gestor",  name:"Gerentes iBen" },
-  "igor@iben.eng.br":      { password:"Iben1234",       role:"gestor",  name:"Igor iBen" },
-  "allan@iben.eng.br": { password:"Iben123",  role:"gestor", name:"Allan iBen" },
+  "igor@iben.eng.br":      { password:"Iben@123",      role:"gestor",  name:"Igor iBen" },
+  "allan@iben.eng.br":     { password:"Iben123",       role:"gestor",  name:"Allan iBen" },
 };
 
 const MOCK_EVALS = [
@@ -411,7 +410,6 @@ function EvalForm({ area, sector, user, evaluations, addEvaluation, updateEvalua
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  // Visibility rules: admin sees all; gestor sees own; diretor sees own
   const areaEvals = evaluations.filter(e => {
     if (e.area !== area) return false;
     if (user.role === "admin") return true;
@@ -601,175 +599,395 @@ function EvalForm({ area, sector, user, evaluations, addEvaluation, updateEvalua
   );
 }
 
-// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+// ─── DASHBOARD MELHORADO ──────────────────────────────────────────────────────
 function Dashboard({ evaluations, onBack }) {
   const [dashType, setDashType] = useState("gestores");
   const [search,   setSearch]   = useState("");
+
+  // Cores institucionais IBEN
+  const IBEN = {
+    verde1: "#052e16",
+    verde2: "#14532d",
+    verde3: "#16a34a",
+    verde4: "#22c55e",
+    verde5: "#4ade80",
+    verde6: "#86efac",
+    verde7: "#dcfce7",
+    amarelo: "#f59e0b",
+    laranja: "#ea580c",
+    vermelho: "#ef4444",
+    cinza: "#6b7280",
+    branco: "#ffffff",
+  };
+
+  const CHART_COLORS = [IBEN.verde4, IBEN.verde3, IBEN.amarelo, IBEN.vermelho];
+  const GRADIENT_COLORS = ["#14532d", "#16a34a", "#22c55e", "#4ade80"];
 
   const baseEvals = evaluations.filter(e =>
     dashType === "gestores" ? e.evaluatorRole === "gestor" : e.evaluatorRole === "diretor"
   );
 
-  const finalCounts = FINAL_OPTIONS.map(f => ({
-    name: f === "BOM, MAS É PRECISO MELHORAR" ? "Bom/Melhorar" : f.split(" ").slice(0,2).join(" "),
+  const total = baseEvals.length || 1;
+
+  const finalCounts = FINAL_OPTIONS.map((f, i) => ({
+    name: f === "BOM, MAS É PRECISO MELHORAR" ? "Bom/Melhorar" :
+          f === "DESEMPENHO EXEMPLAR" ? "Exemplar" :
+          f === "ACIMA DO ESPERADO" ? "Acima" : "Atenção",
+    fullName: f,
     value: baseEvals.filter(e => e.final === f).length,
+    pct: Math.round((baseEvals.filter(e => e.final === f).length / total) * 100),
+    color: CHART_COLORS[i],
   }));
 
-  const areaCounts = [...new Set(baseEvals.map(e => e.area))].map(a => ({
-    name: a.length > 14 ? a.slice(0,13)+"…" : a,
-    count: baseEvals.filter(e => e.area === a).length,
-  }));
+  const areaCounts = [...new Set(baseEvals.map(e => e.area))]
+    .map(a => ({
+      name: a.length > 12 ? a.slice(0, 11) + "…" : a,
+      fullName: a,
+      count: baseEvals.filter(e => e.area === a).length,
+      pct: Math.round((baseEvals.filter(e => e.area === a).length / total) * 100),
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
 
   const valueCounts = [
-    { name:"Igile",  acima:baseEvals.filter(e=>e.q1==="ACIMA DA EXPECTATIVA").length,  dentro:baseEvals.filter(e=>e.q1==="DENTRO DA EXPECTATIVA").length,  abaixo:baseEvals.filter(e=>e.q1==="ABAIXO DA EXPECTATIVA").length },
-    { name:"Kanban", acima:baseEvals.filter(e=>e.q2==="ACIMA DA EXPECTATIVA").length,  dentro:baseEvals.filter(e=>e.q2==="DENTRO DA EXPECTATIVA").length,  abaixo:baseEvals.filter(e=>e.q2==="ABAIXO DA EXPECTATIVA").length },
-    { name:"Norma",  acima:baseEvals.filter(e=>e.q3==="ACIMA DA EXPECTATIVA").length,  dentro:baseEvals.filter(e=>e.q3==="DENTRO DA EXPECTATIVA").length,  abaixo:baseEvals.filter(e=>e.q3==="ABAIXO DA EXPECTATIVA").length },
-  ];
-
-  const managerCounts = [...new Set(baseEvals.map(e => e.evaluatorName))].map(m => ({
-    name: m, count: baseEvals.filter(e => e.evaluatorName === m).length,
+    { name: "Igile",  key: "q1" },
+    { name: "Kanban", key: "q2" },
+    { name: "Norma",  key: "q3" },
+    { name: "Téc.",   key: "q4" },
+    { name: "Comp.",  key: "q5" },
+  ].map(v => ({
+    name: v.name,
+    Acima:  baseEvals.filter(e => e[v.key] === "ACIMA DA EXPECTATIVA").length,
+    Dentro: baseEvals.filter(e => e[v.key] === "DENTRO DA EXPECTATIVA").length,
+    Abaixo: baseEvals.filter(e => e[v.key] === "ABAIXO DA EXPECTATIVA").length,
+    pctAcima: Math.round((baseEvals.filter(e => e[v.key] === "ACIMA DA EXPECTATIVA").length / total) * 100),
   }));
+
+  const managerCounts = [...new Set(baseEvals.map(e => e.evaluatorName))]
+    .map(m => ({
+      name: m.replace(" iBen", "").replace(" Engenharia", ""),
+      count: baseEvals.filter(e => e.evaluatorName === m).length,
+      pct: Math.round((baseEvals.filter(e => e.evaluatorName === m).length / total) * 100),
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const monthCounts = (() => {
+    const map = {};
+    baseEvals.forEach(e => {
+      if (!e.date) return;
+      const m = e.date.slice(0, 7);
+      map[m] = (map[m] || 0) + 1;
+    });
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([mes, count]) => ({
+        name: new Date(mes + "-01").toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }),
+        count,
+        pct: Math.round((count / total) * 100),
+      }));
+  })();
 
   const filtered = baseEvals.filter(e =>
     e.name?.toLowerCase().includes(search.toLowerCase()) ||
-    e.area?.toLowerCase().includes(search.toLowerCase())
+    e.area?.toLowerCase().includes(search.toLowerCase()) ||
+    e.evaluatorName?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const card = { background:"#fff", border:"1px solid #e5e7eb", borderRadius:"14px", padding:"24px" };
+  const KpiCard = ({ label, value, pct, color, icon, sub }) => (
+    <div style={{
+      background: "#fff",
+      border: `1px solid ${color}30`,
+      borderLeft: `4px solid ${color}`,
+      borderRadius: "14px",
+      padding: "20px 22px",
+      boxShadow: "0 2px 12px rgba(0,0,0,.06)",
+      position: "relative",
+      overflow: "hidden",
+    }}>
+      <div style={{ position: "absolute", right: "16px", top: "16px", fontSize: "24px", opacity: .15 }}>{icon}</div>
+      <div style={{ fontSize: "32px", fontWeight: "800", color, fontFamily: "Georgia,serif", lineHeight: 1 }}>{value}</div>
+      {pct !== undefined && (
+        <div style={{ fontSize: "12px", color, fontWeight: "700", marginTop: "2px" }}>{pct}% do total</div>
+      )}
+      <div style={{ color: IBEN.cinza, fontSize: "12px", marginTop: "6px", fontWeight: "600" }}>{label}</div>
+      {sub && <div style={{ color: "#9ca3af", fontSize: "11px", marginTop: "2px" }}>{sub}</div>}
+      {pct !== undefined && (
+        <div style={{ marginTop: "10px", background: "#f3f4f6", borderRadius: "4px", height: "4px" }}>
+          <div style={{ width: `${pct}%`, background: color, borderRadius: "4px", height: "4px", transition: "width .8s ease" }}/>
+        </div>
+      )}
+    </div>
+  );
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div style={{ background: IBEN.verde1, border: `1px solid ${IBEN.verde3}`, borderRadius: "10px",
+        padding: "10px 14px", boxShadow: "0 8px 24px rgba(0,0,0,.3)" }}>
+        <div style={{ color: IBEN.verde6, fontSize: "11px", fontWeight: "700", marginBottom: "6px" }}>{label}</div>
+        {payload.map((p, i) => (
+          <div key={i} style={{ color: "#fff", fontSize: "12px", display: "flex", gap: "8px", alignItems: "center" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: p.color }}/>
+            <span style={{ color: "#d1fae5" }}>{p.name}:</span>
+            <span style={{ fontWeight: "700" }}>{p.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const card = {
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: "16px",
+    padding: "24px",
+    boxShadow: "0 2px 12px rgba(0,0,0,.05)",
+  };
+
+  const sectionTitle = {
+    fontFamily: "Georgia,serif",
+    fontSize: "15px",
+    color: IBEN.verde1,
+    marginBottom: "20px",
+    fontWeight: "700",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  };
 
   return (
-    <div style={{ minHeight:"calc(100vh - 60px)", background:"#f8fafb", padding:"32px 24px" }}>
-      <div style={{ maxWidth:"1100px", margin:"0 auto" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:"16px", marginBottom:"28px" }}>
-          <button onClick={onBack} style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:"8px",
-            padding:"8px 14px", color:"#374151", fontSize:"13px", cursor:"pointer" }}>← Voltar</button>
-          <div>
-            <h2 style={{ fontFamily:"Georgia,serif", fontSize:"24px", fontWeight:"700", color:"#052e16" }}>Dashboard Administrativo</h2>
-            <p style={{ color:"#6b7280", fontSize:"13px" }}>Exclusivo RH · Dados separados por público avaliador</p>
+    <div style={{ minHeight: "calc(100vh - 60px)", background: "#f0f4f0", padding: "28px 24px" }}>
+      <div style={{ maxWidth: "1140px", margin: "0 auto" }}>
+
+        {/* ── Cabeçalho ── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+          marginBottom: "28px", flexWrap: "wrap", gap: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <button onClick={onBack} style={{ background: "#fff", border: "1px solid #e5e7eb",
+              borderRadius: "8px", padding: "8px 14px", color: "#374151", fontSize: "13px", cursor: "pointer" }}>
+              ← Voltar
+            </button>
+            <div>
+              <h2 style={{ fontFamily: "Georgia,serif", fontSize: "24px", fontWeight: "700", color: IBEN.verde1 }}>
+                Dashboard Administrativo
+              </h2>
+              <p style={{ color: IBEN.cinza, fontSize: "12px" }}>
+                Exclusivo RH · {baseEvals.length} avaliações · Dados em tempo real
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "6px", background: "#fff", border: "1px solid #e5e7eb",
+            borderRadius: "12px", padding: "5px" }}>
+            {[["gestores", "👥 Gestores"], ["diretores", "🏛️ Diretores"]].map(([k, l]) => (
+              <button key={k} onClick={() => setDashType(k)} style={{
+                padding: "9px 22px", borderRadius: "8px", fontSize: "13px", cursor: "pointer", border: "none",
+                background: dashType === k ? IBEN.verde1 : "transparent",
+                color: dashType === k ? "#fff" : "#374151",
+                fontWeight: dashType === k ? "700" : "400",
+                transition: "all .2s",
+              }}>
+                {l}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Toggle */}
-        <div style={{ display:"flex", gap:"8px", marginBottom:"24px", background:"#fff", border:"1px solid #e5e7eb",
-          borderRadius:"12px", padding:"6px", width:"fit-content" }}>
-          {[["gestores","👥 Gestores"],["diretores","🏛️ Diretores"]].map(([k,l]) => (
-            <button key={k} onClick={() => setDashType(k)} style={{ padding:"9px 22px", borderRadius:"8px",
-              fontSize:"13px", cursor:"pointer", border:"none",
-              background: dashType===k ? "#14532d" : "transparent",
-              color: dashType===k ? "#fff" : "#374151",
-              fontWeight: dashType===k ? "700" : "400" }}>
-              {l}
-            </button>
-          ))}
+        {/* ── KPIs ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: "16px", marginBottom: "24px" }}>
+          <KpiCard label="Total de Avaliações"    value={baseEvals.length} color={IBEN.verde2} icon="📋" sub={dashType === "gestores" ? "Gestores" : "Diretores"}/>
+          <KpiCard label="Desempenho Exemplar"    value={baseEvals.filter(e => e.final === "DESEMPENHO EXEMPLAR").length}
+            pct={Math.round((baseEvals.filter(e => e.final === "DESEMPENHO EXEMPLAR").length / total) * 100)}
+            color={IBEN.verde3} icon="🏆"/>
+          <KpiCard label="Acima do Esperado"      value={baseEvals.filter(e => e.final === "ACIMA DO ESPERADO").length}
+            pct={Math.round((baseEvals.filter(e => e.final === "ACIMA DO ESPERADO").length / total) * 100)}
+            color="#4d7c0f" icon="⭐"/>
+          <KpiCard label="Bom / Precisa Melhorar" value={baseEvals.filter(e => e.final === "BOM, MAS É PRECISO MELHORAR").length}
+            pct={Math.round((baseEvals.filter(e => e.final === "BOM, MAS É PRECISO MELHORAR").length / total) * 100)}
+            color={IBEN.amarelo} icon="📈"/>
+          <KpiCard label="Pontos de Atenção"      value={baseEvals.filter(e => e.final === "PONTO DE ATENÇÃO").length}
+            pct={Math.round((baseEvals.filter(e => e.final === "PONTO DE ATENÇÃO").length / total) * 100)}
+            color={IBEN.vermelho} icon="⚠️"/>
         </div>
 
-        {/* KPIs */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:"16px", marginBottom:"24px" }}>
-          {[
-            { label:"Total Avaliações",    value: baseEvals.length,                                              color:"#14532d" },
-            { label:"Desempenho Exemplar", value: baseEvals.filter(e=>e.final==="DESEMPENHO EXEMPLAR").length,   color:"#15803d" },
-            { label:"Acima do Esperado",   value: baseEvals.filter(e=>e.final==="ACIMA DO ESPERADO").length,     color:"#4d7c0f" },
-            { label:"Pontos de Atenção",   value: baseEvals.filter(e=>e.final==="PONTO DE ATENÇÃO").length,      color:"#dc2626" },
-          ].map((k,i) => (
-            <div key={i} style={{ ...card, padding:"22px 24px" }}>
-              <div style={{ fontSize:"30px", fontWeight:"700", color:k.color }}>{k.value}</div>
-              <div style={{ color:"#6b7280", fontSize:"12px", marginTop:"4px" }}>{k.label}</div>
-            </div>
-          ))}
-        </div>
+        {/* ── Linha 1: Pizza + Valores ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: "20px", marginBottom: "20px" }}>
 
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"20px", marginBottom:"20px" }}>
           <div style={card}>
-            <h3 style={{ fontFamily:"Georgia,serif", fontSize:"15px", color:"#052e16", marginBottom:"20px", fontWeight:"700" }}>Distribuição Final</h3>
-            <ResponsiveContainer width="100%" height={220}>
+            <div style={sectionTitle}>🎯 Distribuição Final</div>
+            <ResponsiveContainer width="100%" height={240}>
               <PieChart>
-                <Pie data={finalCounts} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({value})=>value||""}>
-                  {finalCounts.map((_,i) => <Cell key={i} fill={PIE_COLORS[i]}/>)}
+                <Pie data={finalCounts} cx="42%" cy="50%" innerRadius={55} outerRadius={90}
+                  dataKey="value" paddingAngle={3}
+                  label={({ name, pct }) => pct > 0 ? `${pct}%` : ""}
+                  labelLine={false}>
+                  {finalCounts.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} stroke="#fff" strokeWidth={2}/>
+                  ))}
                 </Pie>
-                <Tooltip/><Legend iconSize={10} wrapperStyle={{fontSize:"11px"}}/>
+                <Tooltip content={<CustomTooltip/>}/>
+                <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: "11px" }}
+                  formatter={(value, entry) => (
+                    <span style={{ color: "#374151" }}>
+                      {entry.payload.fullName} <strong style={{ color: entry.payload.color }}>({entry.payload.pct}%)</strong>
+                    </span>
+                  )}/>
               </PieChart>
             </ResponsiveContainer>
           </div>
+
           <div style={card}>
-            <h3 style={{ fontFamily:"Georgia,serif", fontSize:"15px", color:"#052e16", marginBottom:"20px", fontWeight:"700" }}>Aderência aos Valores</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={valueCounts} margin={{top:0,right:10,left:-20,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-                <XAxis dataKey="name" tick={{fontSize:12}}/><YAxis tick={{fontSize:11}}/><Tooltip/>
-                <Legend iconSize={10} wrapperStyle={{fontSize:"11px"}}/>
-                <Bar dataKey="acima"  name="Acima"  fill="#22c55e" radius={[4,4,0,0]}/>
-                <Bar dataKey="dentro" name="Dentro" fill="#84cc16" radius={[4,4,0,0]}/>
-                <Bar dataKey="abaixo" name="Abaixo" fill="#ef4444" radius={[4,4,0,0]}/>
+            <div style={sectionTitle}>🌿 Aderência aos Valores IBEN</div>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={valueCounts} margin={{ top: 0, right: 10, left: -20, bottom: 0 }} barSize={18}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false}/>
+                <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#374151" }} axisLine={false} tickLine={false}/>
+                <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false}/>
+                <Tooltip content={<CustomTooltip/>}/>
+                <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: "11px" }}/>
+                <Bar dataKey="Acima"  name="Acima"  fill={IBEN.verde4} radius={[4, 4, 0, 0]}/>
+                <Bar dataKey="Dentro" name="Dentro" fill={IBEN.amarelo} radius={[4, 4, 0, 0]}/>
+                <Bar dataKey="Abaixo" name="Abaixo" fill={IBEN.vermelho} radius={[4, 4, 0, 0]}/>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"20px", marginBottom:"24px" }}>
+        {/* ── Linha 2: Por Avaliador + Tendência ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "20px", marginBottom: "20px" }}>
+
           <div style={card}>
-            <h3 style={{ fontFamily:"Georgia,serif", fontSize:"15px", color:"#052e16", marginBottom:"20px", fontWeight:"700" }}>Por Área</h3>
+            <div style={sectionTitle}>👤 Por Avaliador</div>
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={areaCounts} layout="vertical" margin={{top:0,right:10,left:0,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-                <XAxis type="number" tick={{fontSize:11}}/>
-                <YAxis dataKey="name" type="category" tick={{fontSize:11}} width={90}/>
-                <Tooltip/>
-                <Bar dataKey="count" name="Avaliações" fill="#14532d" radius={[0,4,4,0]}/>
+              <BarChart data={managerCounts} margin={{ top: 0, right: 20, left: -20, bottom: 0 }} barSize={28}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false}/>
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#374151" }} axisLine={false} tickLine={false}/>
+                <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false}/>
+                <Tooltip content={<CustomTooltip/>}/>
+                <Bar dataKey="count" name="Avaliações" fill={IBEN.verde2} radius={[6, 6, 0, 0]}>
+                  {managerCounts.map((entry, i) => (
+                    <Cell key={i} fill={GRADIENT_COLORS[i % GRADIENT_COLORS.length]}/>
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+              {managerCounts.map((m, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: "6px",
+                  background: "#f8fafb", borderRadius: "20px", padding: "4px 10px", fontSize: "11px" }}>
+                  <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: GRADIENT_COLORS[i % GRADIENT_COLORS.length] }}/>
+                  <span style={{ color: "#374151", fontWeight: "600" }}>{m.name}</span>
+                  <span style={{ color: IBEN.verde3, fontWeight: "700" }}>{m.pct}%</span>
+                </div>
+              ))}
+            </div>
           </div>
+
           <div style={card}>
-            <h3 style={{ fontFamily:"Georgia,serif", fontSize:"15px", color:"#052e16", marginBottom:"20px", fontWeight:"700" }}>Por Avaliador</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={managerCounts} margin={{top:0,right:10,left:-20,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-                <XAxis dataKey="name" tick={{fontSize:11}}/><YAxis tick={{fontSize:11}}/><Tooltip/>
-                <Bar dataKey="count" name="Avaliações" fill="#16a34a" radius={[4,4,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
+            <div style={sectionTitle}>📅 Tendência Mensal</div>
+            {monthCounts.length > 0 ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={monthCounts} margin={{ top: 0, right: 10, left: -20, bottom: 0 }} barSize={32}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false}/>
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#374151" }} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false}/>
+                  <Tooltip content={<CustomTooltip/>}/>
+                  <Bar dataKey="count" name="Avaliações" fill={IBEN.verde3} radius={[6, 6, 0, 0]}>
+                    {monthCounts.map((_, i) => (
+                      <Cell key={i} fill={i === monthCounts.length - 1 ? IBEN.verde4 : IBEN.verde2}/>
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ height: "220px", display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#9ca3af", fontSize: "13px" }}>
+                Sem dados de tendência disponíveis.
+              </div>
+            )}
           </div>
         </div>
 
+        {/* ── Por Área ── */}
+        <div style={{ ...card, marginBottom: "20px" }}>
+          <div style={sectionTitle}>🏢 Top 10 Áreas por Avaliações</div>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={areaCounts} layout="vertical" margin={{ top: 0, right: 60, left: 10, bottom: 0 }} barSize={16}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false}/>
+              <XAxis type="number" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false}/>
+              <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: "#374151" }} width={80} axisLine={false} tickLine={false}/>
+              <Tooltip content={<CustomTooltip/>}/>
+              <Bar dataKey="count" name="Avaliações" radius={[0, 6, 6, 0]}>
+                {areaCounts.map((entry, i) => (
+                  <Cell key={i} fill={i === 0 ? IBEN.verde2 : i < 3 ? IBEN.verde3 : IBEN.verde4}/>
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+            {areaCounts.slice(0, 6).map((a, i) => (
+              <div key={i} style={{ background: IBEN.verde7, border: `1px solid ${IBEN.verde6}`,
+                borderRadius: "20px", padding: "4px 12px", fontSize: "11px", color: IBEN.verde2, fontWeight: "600" }}>
+                {a.fullName} · <strong>{a.pct}%</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Tabela ── */}
         <div style={card}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"16px" }}>
-            <h3 style={{ fontFamily:"Georgia,serif", fontSize:"15px", color:"#052e16", fontWeight:"700" }}>
-              Avaliações – {dashType === "gestores" ? "Gestores" : "Diretores"}
-            </h3>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..."
-              style={{ border:"1px solid #e5e7eb", borderRadius:"8px", padding:"8px 14px", fontSize:"13px", outline:"none", width:"220px" }}/>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
+            <div style={sectionTitle}>
+              📄 Avaliações — {dashType === "gestores" ? "Gestores" : "Diretores"}
+              <span style={{ background: IBEN.verde7, color: IBEN.verde2, padding: "2px 10px",
+                borderRadius: "20px", fontSize: "11px", fontWeight: "700" }}>
+                {filtered.length} registros
+              </span>
+            </div>
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="🔍 Buscar colaborador, área ou avaliador..."
+              style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "9px 14px",
+                fontSize: "13px", outline: "none", width: "280px", background: "#f8fafb" }}/>
           </div>
-          <div style={{ overflowX:"auto" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px" }}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
               <thead>
-                <tr style={{ borderBottom:"2px solid #e5e7eb" }}>
-                  {["Colaborador","Função","Área","Avaliador","Perfil","Data","Resultado"].map(h => (
-                    <th key={h} style={{ textAlign:"left", padding:"10px 12px", color:"#6b7280", fontSize:"11px", fontWeight:"600", letterSpacing:".5px" }}>{h}</th>
+                <tr style={{ background: IBEN.verde1 }}>
+                  {["Colaborador", "Função", "Área", "Avaliador", "Perfil", "Data", "Resultado"].map(h => (
+                    <th key={h} style={{ textAlign: "left", padding: "12px 14px", color: IBEN.verde6,
+                      fontSize: "10px", fontWeight: "700", letterSpacing: "1px" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(ev => (
-                  <tr key={ev.id} style={{ borderBottom:"1px solid #f3f4f6" }}
-                    onMouseEnter={e => e.currentTarget.style.background="#f8fafb"}
-                    onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-                    <td style={{ padding:"11px 12px", fontWeight:"600", color:"#052e16" }}>{ev.name}</td>
-                    <td style={{ padding:"11px 12px", color:"#6b7280" }}>{ev.role}</td>
-                    <td style={{ padding:"11px 12px" }}>
-                      <span style={{ background:"#dcfce7", color:"#14532d", padding:"2px 8px", borderRadius:"20px", fontSize:"11px", fontWeight:"600" }}>{ev.area}</span>
+                {filtered.map((ev, idx) => (
+                  <tr key={ev.id} style={{ borderBottom: "1px solid #f3f4f6",
+                    background: idx % 2 === 0 ? "#fff" : "#f8fafb" }}
+                    onMouseEnter={e => e.currentTarget.style.background = IBEN.verde7}
+                    onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? "#fff" : "#f8fafb"}>
+                    <td style={{ padding: "12px 14px", fontWeight: "700", color: IBEN.verde1 }}>{ev.name}</td>
+                    <td style={{ padding: "12px 14px", color: IBEN.cinza }}>{ev.role}</td>
+                    <td style={{ padding: "12px 14px" }}>
+                      <span style={{ background: IBEN.verde7, color: IBEN.verde2, padding: "3px 10px",
+                        borderRadius: "20px", fontSize: "11px", fontWeight: "700" }}>{ev.area}</span>
                     </td>
-                    <td style={{ padding:"11px 12px", color:"#6b7280" }}>{ev.evaluatorName}</td>
-                    <td style={{ padding:"11px 12px" }}><RoleBadge role={ev.evaluatorRole}/></td>
-                    <td style={{ padding:"11px 12px", color:"#6b7280" }}>{ev.date}</td>
-                    <td style={{ padding:"11px 12px" }}><FinalBadge value={ev.final}/></td>
+                    <td style={{ padding: "12px 14px", color: IBEN.cinza }}>{ev.evaluatorName}</td>
+                    <td style={{ padding: "12px 14px" }}><RoleBadge role={ev.evaluatorRole}/></td>
+                    <td style={{ padding: "12px 14px", color: IBEN.cinza }}>{ev.date}</td>
+                    <td style={{ padding: "12px 14px" }}><FinalBadge value={ev.final}/></td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={7} style={{ padding:"32px", textAlign:"center", color:"#9ca3af" }}>Nenhum resultado.</td></tr>
+                  <tr><td colSpan={7} style={{ padding: "40px", textAlign: "center", color: "#9ca3af" }}>
+                    Nenhum resultado encontrado.
+                  </td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
+
       </div>
     </div>
   );
@@ -785,7 +1003,6 @@ export default function App() {
   const [editTarget,  setEditTarget]  = useState(null);
   const [loading,     setLoading]     = useState(true);
 
-  // ── Load evaluations from Firestore in real-time ──
   useEffect(() => {
     const q = query(collection(db, "evaluations"), orderBy("date", "desc"));
     const unsub = onSnapshot(q, (snapshot) => {
@@ -793,14 +1010,12 @@ export default function App() {
       setEvaluations(data);
       setLoading(false);
     }, () => {
-      // Firestore not configured yet — fall back to mock data
       setEvaluations(MOCK_EVALS);
       setLoading(false);
     });
     return () => unsub();
   }, []);
 
-  // ── Save new evaluation ──
   const addEvaluation = async (record) => {
     try {
       const { id, ...data } = record;
@@ -810,7 +1025,6 @@ export default function App() {
     }
   };
 
-  // ── Update evaluation ──
   const updateEvaluation = async (record) => {
     try {
       const { id, ...data } = record;
@@ -820,7 +1034,6 @@ export default function App() {
     }
   };
 
-  // ── Delete evaluation ──
   const deleteEvaluation = async (id) => {
     try {
       await deleteDoc(doc(db, "evaluations", String(id)));
