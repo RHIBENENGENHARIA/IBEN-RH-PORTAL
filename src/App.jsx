@@ -3,7 +3,7 @@ import { db } from "./firebase";
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from "firebase/firestore";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
 } from "recharts";
 
 const LOGO_B64 = "data:image/png;base64,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";
@@ -655,13 +655,37 @@ function Dashboard({ evaluations, onBack }) {
     { name: "Norma",  key: "q3" },
     { name: "Téc.",   key: "q4" },
     { name: "Comp.",  key: "q5" },
-  ].map(v => ({
-    name: v.name,
-    Acima:  baseEvals.filter(e => e[v.key] === "ACIMA DA EXPECTATIVA").length,
-    Dentro: baseEvals.filter(e => e[v.key] === "DENTRO DA EXPECTATIVA").length,
-    Abaixo: baseEvals.filter(e => e[v.key] === "ABAIXO DA EXPECTATIVA").length,
-    pctAcima: Math.round((baseEvals.filter(e => e[v.key] === "ACIMA DA EXPECTATIVA").length / total) * 100),
-  }));
+  ].map(v => {
+    const nAcima  = baseEvals.filter(e => e[v.key] === "ACIMA DA EXPECTATIVA").length;
+    const nDentro = baseEvals.filter(e => e[v.key] === "DENTRO DA EXPECTATIVA").length;
+    const nAbaixo = baseEvals.filter(e => e[v.key] === "ABAIXO DA EXPECTATIVA").length;
+    const respondidas = (nAcima + nDentro + nAbaixo) || 1;
+    return {
+      name: v.name,
+      Acima:  Math.round((nAcima  / respondidas) * 100),
+      Dentro: Math.round((nDentro / respondidas) * 100),
+      Abaixo: Math.round((nAbaixo / respondidas) * 100),
+      nAcima, nDentro, nAbaixo,
+    };
+  });
+
+  const ValoresTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div style={{ background: "#052e16", border: "1px solid #16a34a", borderRadius: "10px",
+        padding: "10px 14px", boxShadow: "0 8px 24px rgba(0,0,0,.3)" }}>
+        <div style={{ color: "#86efac", fontSize: "11px", fontWeight: "700", marginBottom: "6px" }}>{label}</div>
+        {payload.map((p, i) => (
+          <div key={i} style={{ color: "#fff", fontSize: "12px", display: "flex", gap: "8px", alignItems: "center" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: p.color }}/>
+            <span style={{ color: "#d1fae5" }}>{p.name}:</span>
+            <span style={{ fontWeight: "700" }}>{p.value}%</span>
+            <span style={{ color: "#86efac" }}>({p.payload["n" + p.dataKey]})</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const managerCounts = [...new Set(baseEvals.map(e => e.evaluatorName))]
     .map(m => ({
@@ -840,15 +864,22 @@ function Dashboard({ evaluations, onBack }) {
           <div style={card}>
             <div style={sectionTitle}>🌿 Aderência aos Valores IBEN</div>
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={valueCounts} margin={{ top: 0, right: 10, left: -20, bottom: 0 }} barSize={18}>
+              <BarChart data={valueCounts} margin={{ top: 22, right: 10, left: -14, bottom: 0 }} barSize={18}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false}/>
                 <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#374151" }} axisLine={false} tickLine={false}/>
-                <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false}/>
-                <Tooltip content={<CustomTooltip/>}/>
+                <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={v => `${v}%`}
+                  tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false}/>
+                <Tooltip content={<ValoresTooltip/>} cursor={{ fill: "rgba(22,163,74,.06)" }}/>
                 <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: "11px" }}/>
-                <Bar dataKey="Acima"  name="Acima"  fill={IBEN.verde4} radius={[4, 4, 0, 0]}/>
-                <Bar dataKey="Dentro" name="Dentro" fill={IBEN.amarelo} radius={[4, 4, 0, 0]}/>
-                <Bar dataKey="Abaixo" name="Abaixo" fill={IBEN.vermelho} radius={[4, 4, 0, 0]}/>
+                <Bar dataKey="Acima"  name="Acima"  fill={IBEN.verde4} radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="Acima"  position="top" formatter={v => v > 0 ? `${v}%` : ""} style={{ fontSize: "10px", fontWeight: 700, fill: "#14532d" }}/>
+                </Bar>
+                <Bar dataKey="Dentro" name="Dentro" fill={IBEN.amarelo} radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="Dentro" position="top" formatter={v => v > 0 ? `${v}%` : ""} style={{ fontSize: "10px", fontWeight: 700, fill: "#92400e" }}/>
+                </Bar>
+                <Bar dataKey="Abaixo" name="Abaixo" fill={IBEN.vermelho} radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="Abaixo" position="top" formatter={v => v > 0 ? `${v}%` : ""} style={{ fontSize: "10px", fontWeight: 700, fill: "#b91c1c" }}/>
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
